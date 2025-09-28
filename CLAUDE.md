@@ -55,7 +55,7 @@ When running locally, traces go to Honeycomb in environment banana. Datasets inc
 ### Get a recent trace
 
 Use the Honeycomb MCP. Run a query for trace.trace_id and name, where meta.signal_type=trace, in the last 10-30 minutes. Then fetch a trace by trace ID.
-Link me to the trace in this format: https://ui.honeycomb.io/modernity/environments/banana/trace?trace_id=<traceId>
+Link me to the trace in this format: https://ui.honeycomb.io/opentelemetry-workshop/environments/banana/trace?trace_id=<traceId>
 
 ## High-Level Architecture
 

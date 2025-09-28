@@ -284,7 +284,7 @@ def print_link_to_current_trace() -> None:
     current_span = trace.get_current_span()
     trace_id = current_span.get_span_context().trace_id
     print(
-        f"Link to current trace: https://ui.honeycomb.io/modernity/environments/banana?trace_id={trace_id}"
+        f"Link to current trace: https://ui.honeycomb.io/opentelemetry-workshop/environments/openhands?trace_id={trace_id}"
     )
 
 

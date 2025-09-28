@@ -474,29 +474,31 @@ def run_alias_setup_flow(config: OpenHandsConfig) -> None:
         )
 
         if choice == 0:  # User chose "Yes"
-            success = add_aliases_to_shell_config()
-            if success:
-                print_formatted_text('')
-                print_formatted_text(
-                    HTML('<ansigreen>✅ Aliases added successfully!</ansigreen>')
-                )
-
-                # Get the appropriate reload command using the shell config manager
-                shell_manager = ShellConfigManager()
-                reload_cmd = shell_manager.get_reload_command()
-
-                print_formatted_text(
-                    HTML(
-                        f'<grey>Run <b>{reload_cmd}</b> (or restart your terminal) to use the new aliases.</grey>'
+            with tracer.start_as_current_span("add_aliases_to_shell_config") as span:
+                success = add_aliases_to_shell_config()
+                span.set_attribute('app.success', success)
+                if success:
+                    print_formatted_text('')
+                    print_formatted_text(
+                        HTML('<ansigreen>✅ Aliases added successfully!</ansigreen>')
                     )
-                )
-            else:
-                print_formatted_text('')
-                print_formatted_text(
-                    HTML(
-                        '<ansired>❌ Failed to add aliases. You can set them up manually later.</ansired>'
+
+                    # Get the appropriate reload command using the shell config manager
+                    shell_manager = ShellConfigManager()
+                    reload_cmd = shell_manager.get_reload_command()
+
+                    print_formatted_text(
+                        HTML(
+                            f'<grey>Run <b>{reload_cmd}</b> (or restart your terminal) to use the new aliases.</grey>'
+                        )
                     )
-                )
+                else:
+                    print_formatted_text('')
+                    print_formatted_text(
+                        HTML(
+                            '<ansired>❌ Failed to add aliases. You can set them up manually later.</ansired>'
+                        )
+                    )
         else:  # User chose "No"
             print_formatted_text('')
             print_formatted_text(
@@ -704,7 +706,7 @@ def print_link_to_current_trace() -> None:
     # the trace_id needs to be the same number of digits
     trace_id_in_hex_string = hex(trace_id)[2:].zfill(32)
     print(
-        f"Link to current trace: https://ui.honeycomb.io/modernity/environments/openhands/trace?trace_id={trace_id_in_hex_string}"
+        f"Link to current trace: https://ui.honeycomb.io/opentelemetry-workshop/environments/openhands/trace?trace_id={trace_id_in_hex_string}"
     )
     print(f"https://jaeger.jessitron.honeydemo.io/trace/{trace_id_in_hex_string}")
 

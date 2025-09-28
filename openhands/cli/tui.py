@@ -9,6 +9,7 @@ import threading
 import time
 from typing import Generator
 
+from opentelemetry import trace
 from prompt_toolkit import PromptSession, print_formatted_text
 from prompt_toolkit.application import Application
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
@@ -49,6 +50,8 @@ from openhands.events.observation import (
     WebSearchObservation,
 )
 from openhands.llm.metrics import Metrics
+
+tracer = trace.get_tracer(__name__)
 
 ENABLE_STREAMING = False  # FIXME: this doesn't work
 
@@ -711,7 +714,6 @@ async def process_agent_pause(done: asyncio.Event, event_stream: EventStream) ->
     finally:
         input.close()
 
-
 def cli_confirm(
     config: OpenHandsConfig,
     question: str = 'Are you sure?',
@@ -721,69 +723,78 @@ def cli_confirm(
 
     Returns the index of the selected choice.
     """
-    if choices is None:
-        choices = ['Yes', 'No']
-    selected = [0]  # Using list to allow modification in closure
+    with tracer.start_as_current_span('cli_confirm') as span:
+        span.set_attribute('app.question', question)
+        span.set_attribute('app.choices', str(choices))
+        if choices is None:
+            choices = ['Yes', 'No']
+        selected = [0]  # Using list to allow modification in closure
 
-    def get_choice_text() -> list:
-        return [
-            ('class:question', f'{question}\n\n'),
-        ] + [
-            (
-                'class:selected' if i == selected[0] else 'class:unselected',
-                f'{"> " if i == selected[0] else "  "}{choice}\n',
-            )
-            for i, choice in enumerate(choices)
-        ]
+        def get_choice_text() -> list:
+            return [
+                ('class:question', f'{question}\n\n'),
+            ] + [
+                (
+                    'class:selected' if i == selected[0] else 'class:unselected',
+                    f'{"> " if i == selected[0] else "  "}{choice}\n',
+                )
+                for i, choice in enumerate(choices)
+            ]
 
-    kb = KeyBindings()
+        kb = KeyBindings()
 
-    @kb.add('up')
-    def _handle_up(event: KeyPressEvent) -> None:
-        selected[0] = (selected[0] - 1) % len(choices)
-
-    if config.cli.vi_mode:
-
-        @kb.add('k')
-        def _handle_k(event: KeyPressEvent) -> None:
+        @kb.add('up')
+        def _handle_up(event: KeyPressEvent) -> None:
+            trace.get_current_span().add_event('cli_confirm:up')
             selected[0] = (selected[0] - 1) % len(choices)
 
-    @kb.add('down')
-    def _handle_down(event: KeyPressEvent) -> None:
-        selected[0] = (selected[0] + 1) % len(choices)
+        if config.cli.vi_mode:
 
-    if config.cli.vi_mode:
+            @kb.add('k')
+            def _handle_k(event: KeyPressEvent) -> None:
+                selected[0] = (selected[0] - 1) % len(choices)
 
-        @kb.add('j')
-        def _handle_j(event: KeyPressEvent) -> None:
+        @kb.add('down')
+        def _handle_down(event: KeyPressEvent) -> None:
+            trace.get_current_span().add_event('cli_confirm:down')
             selected[0] = (selected[0] + 1) % len(choices)
 
-    @kb.add('enter')
-    def _handle_enter(event: KeyPressEvent) -> None:
-        event.app.exit(result=selected[0])
+        if config.cli.vi_mode:
 
-    style = Style.from_dict({'selected': COLOR_GOLD, 'unselected': ''})
+            @kb.add('j')
+            def _handle_j(event: KeyPressEvent) -> None:
+                selected[0] = (selected[0] + 1) % len(choices)
 
-    layout = Layout(
-        HSplit(
-            [
-                Window(
-                    FormattedTextControl(get_choice_text),
-                    always_hide_cursor=True,
-                )
-            ]
+        @kb.add('enter')
+        def _handle_enter(event: KeyPressEvent) -> None:
+            trace.get_current_span().add_event('cli_confirm:enter')
+            event.app.exit(result=selected[0])
+
+        style = Style.from_dict({'selected': COLOR_GOLD, 'unselected': ''})
+
+        layout = Layout(
+            HSplit(
+                [
+                    Window(
+                        FormattedTextControl(get_choice_text),
+                        always_hide_cursor=True,
+                    )
+                ]
+            )
         )
-    )
 
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        style=style,
-        mouse_support=True,
-        full_screen=False,
-    )
+        app = Application(
+            layout=layout,
+            key_bindings=kb,
+            style=style,
+            mouse_support=True,
+            full_screen=False,
+        )
 
-    return app.run(in_thread=True)
+        result = app.run(in_thread=True)
+        span.set_attribute('app.result', str(result))
+        span.set_attribute('app.result.choice', choices[result])
+        return result
 
 
 def kb_cancel() -> KeyBindings:
