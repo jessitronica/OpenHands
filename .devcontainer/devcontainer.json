@@ -16,7 +16,7 @@
   "mounts": [
     "source=vscode-extensions,target=/root/.vscode-server/extensions,type=volume",
     "source=devcontainer-cache,target=/var/cache,type=volume",
-    "source=/Users/jessicakerr/code/jessitron/simple-web-page,target=/workspaces/simple-web-page,type=bind"
+    // "source=/Users/jessicakerr/code/jessitron/simple-web-page,target=/workspaces/simple-web-page,type=bind"
   ],
   "containerEnv": {
     "DOCKER_HOST_ADDR": "host.docker.internal"
