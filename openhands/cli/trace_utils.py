@@ -1,5 +1,5 @@
-
 from opentelemetry import trace
+
 
 class TraceUtils:
     _instance = None
@@ -23,7 +23,7 @@ class TraceUtils:
         occurrences += 1
         self.occurrences[key] = occurrences
         if self.root_span:
-            self.set_attribute_on_root_span(f"app.count.{key}", occurrences)
+            self.set_attribute_on_root_span(f'app.count.{key}', occurrences)
 
 
 trace_utils = TraceUtils()
