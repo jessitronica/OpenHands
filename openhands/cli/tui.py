@@ -29,6 +29,7 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
 
 from openhands import __version__
+from openhands.cli.trace_utils import trace_utils
 from openhands.core.config import OpenHandsConfig
 from openhands.core.schema import AgentState
 from openhands.events import EventSource, EventStream
@@ -649,10 +650,13 @@ async def read_confirmation_input(config: OpenHandsConfig) -> str:
                 )
 
                 if confirmation in ['y', 'yes']:
+                    trace_utils.count_occurrence('confirmation-status-yes')
                     return 'yes'
                 elif confirmation in ['n', 'no']:
+                    trace_utils.count_occurrence('confirmation-status-no')
                     return 'no'
                 elif confirmation in ['a', 'always']:
+                    trace_utils.count_occurrence('confirmation-status-always')
                     return 'always'
                 else:
                     # Display error message for invalid input
@@ -664,6 +668,7 @@ async def read_confirmation_input(config: OpenHandsConfig) -> str:
                     )
                     # Continue the loop to re-prompt
     except (KeyboardInterrupt, EOFError):
+        trace_utils.count_occurrence('confirmation-status-no')
         return 'no'
 
 
@@ -713,6 +718,7 @@ async def process_agent_pause(done: asyncio.Event, event_stream: EventStream) ->
                 await done.wait()
     finally:
         input.close()
+
 
 def cli_confirm(
     config: OpenHandsConfig,
