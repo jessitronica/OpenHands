@@ -629,6 +629,11 @@ async def read_prompt_input(
                 message = await prompt_session.prompt_async(
                     HTML('<gold>> </gold>'),
                 )
+
+        # Count user interaction when a message is successfully entered
+        if message is not None and message.strip():
+            trace_utils.count_occurrence('user-interactions')
+
         return message if message is not None else ''
     except (KeyboardInterrupt, EOFError):
         return '/exit'

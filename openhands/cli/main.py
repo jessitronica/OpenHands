@@ -365,6 +365,7 @@ async def run_session(
     if initial_message:
         display_initial_user_prompt(initial_message)
         event_stream.add_event(MessageAction(content=initial_message), EventSource.USER)
+        trace_utils.count_occurrence('user-interactions')
     else:
         # No session restored, no initial action: prompt for the user's first message
         asyncio.create_task(prompt_for_next_task(''))
