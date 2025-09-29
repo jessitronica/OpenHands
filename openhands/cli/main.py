@@ -606,6 +606,9 @@ async def main_with_loop(loop: asyncio.AbstractEventLoop) -> None:
         # This ensures Jupyter plugin is disabled for CLI runtime
         finalize_config(config)
 
+    # Add selected repository to tracing span
+    trace.get_current_span().set_attribute("config.sandbox.selected_repo", config.sandbox.selected_repo)
+
     # Check if we should show the alias setup flow
     # Only show it if aliases don't exist in the shell configuration
     # and we're in an interactive environment (not during tests or CI)
