@@ -8,12 +8,12 @@ from prompt_toolkit.widgets import Frame, TextArea
 
 tracer = trace.get_tracer(__name__)
 
-from openhands.cli.trace_utils import trace_utils
 from openhands.cli.settings import (
     display_settings,
     modify_llm_settings_advanced,
     modify_llm_settings_basic,
 )
+from openhands.cli.trace_utils import trace_utils
 from openhands.cli.tui import (
     COLOR_GREY,
     UsageMetrics,
@@ -115,9 +115,11 @@ def handle_exit_command(
             '\nWas the assistant useful?',
             usefulness_choices,
         )
-        trace.get_current_span().set_attribute("app.useful", usefulness_report)
-        trace_utils.set_attribute_on_root_span("app.useful", usefulness_report)
-        trace_utils.set_attribute_on_root_span("app.useful.choice", usefulness_choices[usefulness_report])
+        trace.get_current_span().set_attribute('app.useful', usefulness_report)
+        trace_utils.set_attribute_on_root_span('app.useful', str(usefulness_report))
+        trace_utils.set_attribute_on_root_span(
+            'app.useful.choice', usefulness_choices[usefulness_report]
+        )
 
         event_stream.add_event(
             ChangeAgentStateAction(AgentState.STOPPED),
@@ -303,8 +305,7 @@ async def init_repository(config: OpenHandsConfig, current_dir: str) -> bool:
 def check_folder_security_agreement(config: OpenHandsConfig, current_dir: str) -> bool:
     # Directories trusted by user for the CLI to use as workspace
     # Config from ~/.openhands/config.toml overrides the app config
-    with tracer.start_as_current_span("check_folder_security_agreement") as span:
-
+    with tracer.start_as_current_span('check_folder_security_agreement'):
         app_config_trusted_dirs = config.sandbox.trusted_dirs
         local_config_trusted_dirs = get_local_config_trusted_dirs()
 

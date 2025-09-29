@@ -8,6 +8,7 @@ import json
 from litellm import (
     ModelResponse,
 )
+from opentelemetry import trace
 
 from openhands.agenthub.codeact_agent.tools import (
     BrowserTool,
@@ -42,7 +43,13 @@ from openhands.events.action.agent import CondensationRequestAction
 from openhands.events.action.mcp import MCPAction
 from openhands.events.event import FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
-from opentelemetry import trace
+
+# Import trace_utils for CLI tool call counting
+try:
+    from openhands.cli.trace_utils import trace_utils
+except ImportError:
+    # trace_utils might not be available in all contexts
+    trace_utils = None  # type: ignore
 
 tracer = trace.get_tracer(__name__)
 
@@ -76,13 +83,15 @@ def response_to_actions(
 
         # Process each tool call to OpenHands action
         for i, tool_call in enumerate(assistant_msg.tool_calls):
-            with tracer.start_as_current_span("function_calling") as span:
-                span.set_attribute("app.tool_call", str(tool_call))
+            if trace_utils is not None:
+                trace_utils.count_occurrence('tool-call')
+            with tracer.start_as_current_span('tool-call') as span:
+                span.set_attribute('app.tool_call', str(tool_call))
                 span.set_attribute(
-                    "app.tool_call.function_name", tool_call.function.name
+                    'app.tool_call.function_name', tool_call.function.name
                 )
                 span.set_attribute(
-                    "app.tool_call.arguments", tool_call.function.arguments
+                    'app.tool_call.arguments', tool_call.function.arguments
                 )
                 action: Action
                 logger.debug(f'Tool call in function_calling.py: {tool_call}')
