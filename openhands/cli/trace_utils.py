@@ -14,7 +14,8 @@ class TraceUtils:
     def remember_root_span(self):
         self.root_span = trace.get_current_span()
 
-    def set_attribute_on_root_span(self, key: str, value: str) -> None:
+    # value can be string or number
+    def set_attribute_on_root_span(self, key: str, value: str | int | float | bool) -> None:
         if self.root_span:
             self.root_span.set_attribute(key, value)
 
@@ -22,8 +23,7 @@ class TraceUtils:
         occurrences = self.occurrences.get(key, 0)
         occurrences += 1
         self.occurrences[key] = occurrences
-        if self.root_span:
-            self.set_attribute_on_root_span(f'app.count.{key}', occurrences)
+        self.set_attribute_on_root_span(f'app.count.{key}', occurrences)
 
 
 trace_utils = TraceUtils()
