@@ -10,6 +10,7 @@ from prompt_toolkit.shortcuts import clear
 from opentelemetry import trace
 
 import openhands.agenthub  # noqa F401 (we import this to get the agents registered)
+from openhands.cli.trace_utils import trace_utils
 import openhands.cli.suppress_warnings  # noqa: F401
 from openhands.cli.commands import (
     check_folder_security_agreement,
@@ -712,6 +713,7 @@ def print_link_to_current_trace() -> None:
 
 if __name__ == '__main__':
     with tracer.start_as_current_span("main"):
+        trace_utils.remember_root_span()
         main()
         print_link_to_current_trace()
         logger.warning("Exiting")

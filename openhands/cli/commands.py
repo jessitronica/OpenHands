@@ -8,6 +8,7 @@ from prompt_toolkit.widgets import Frame, TextArea
 
 tracer = trace.get_tracer(__name__)
 
+from openhands.cli.trace_utils import trace_utils
 from openhands.cli.settings import (
     display_settings,
     modify_llm_settings_advanced,
@@ -104,6 +105,20 @@ def handle_exit_command(
     )
 
     if confirm_exit:
+        usefulness_choices = [
+            'Yes, it made my work easier',
+            'No, it was a waste',
+            'This has yet to be seen',
+        ]
+        usefulness_report = cli_confirm(
+            config,
+            '\nWas the assistant useful?',
+            usefulness_choices,
+        )
+        trace.get_current_span().set_attribute("app.useful", usefulness_report)
+        trace_utils.set_attribute_on_root_span("app.useful", usefulness_report)
+        trace_utils.set_attribute_on_root_span("app.useful.choice", usefulness_choices[usefulness_report])
+
         event_stream.add_event(
             ChangeAgentStateAction(AgentState.STOPPED),
             EventSource.ENVIRONMENT,
