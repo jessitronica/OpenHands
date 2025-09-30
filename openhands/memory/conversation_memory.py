@@ -164,8 +164,6 @@ class ConversationMemory:
                             tool_call_id_to_message.pop(tool_call.id)
                         _response_ids_to_remove.append(response_id)
                         span.add_event("adding message and tool call responses", {"app.pending_message": str(pending_message)})
-                    else:
-                        span.add_event("message still waiting for tools to complete", {"app.pending_message": str(pending_message)})
 
                 # Cleanup the processed pending tool messages
                 for response_id in _response_ids_to_remove:
