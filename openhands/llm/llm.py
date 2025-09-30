@@ -190,6 +190,15 @@ class LLM(RetryMixin, DebugMixin):
             kwargs.pop(
                 'temperature'
             )  # temperature is not supported for reasoning models
+
+        # Anthropic models don't allow both temperature and top_p to be specified
+        # Prioritize temperature over top_p for Anthropic models
+        is_anthropic_model = (
+            'claude' in self.config.model.lower()
+            or 'anthropic' in self.config.model.lower()
+            or self.config.model.startswith('anthropic/')
+        )
+
         # Azure issue: https://github.com/All-Hands-AI/OpenHands/issues/6777
         if self.config.model.startswith('azure'):
             kwargs['max_tokens'] = self.config.max_output_tokens
@@ -201,21 +210,26 @@ class LLM(RetryMixin, DebugMixin):
         elif 'gemini' in self.config.model.lower() and self.config.safety_settings:
             kwargs['safety_settings'] = self.config.safety_settings
 
-        self._completion = partial(
-            litellm_completion,
-            model=self.config.model,
-            api_key=self.config.api_key.get_secret_value()
+        # Prepare completion function arguments
+        completion_kwargs = {
+            'model': self.config.model,
+            'api_key': self.config.api_key.get_secret_value()
             if self.config.api_key
             else None,
-            base_url=self.config.base_url,
-            api_version=self.config.api_version,
-            custom_llm_provider=self.config.custom_llm_provider,
-            timeout=self.config.timeout,
-            top_p=self.config.top_p,
-            drop_params=self.config.drop_params,
-            seed=self.config.seed,
+            'base_url': self.config.base_url,
+            'api_version': self.config.api_version,
+            'custom_llm_provider': self.config.custom_llm_provider,
+            'timeout': self.config.timeout,
+            'drop_params': self.config.drop_params,
+            'seed': self.config.seed,
             **kwargs,
-        )
+        }
+
+        # Only add top_p for non-Anthropic models to avoid conflicts with temperature
+        if not is_anthropic_model:
+            completion_kwargs['top_p'] = self.config.top_p
+
+        self._completion = partial(litellm_completion, **completion_kwargs)
 
         self._completion_unwrapped = self._completion
 
