@@ -169,6 +169,7 @@ class EventStream(EventStore):
             {
                 "app.event_type": event.__class__.__name__,
                 "app.event_source": source.value,
+                "jess.whereami": "we are in add_event in stream.py",
             },
         )
         if event.id != Event.INVALID_ID:

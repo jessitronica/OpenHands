@@ -33,7 +33,10 @@ export OTEL_LOG_LEVEL=info
 # DEBUG = 10
 # NOTSET = 0
 
-export SANDBOX_VOLUMES="/workspaces/simple-web-page:/workspace:rw"
+# export SANDBOX_VOLUMES="/workspaces/mtg-deck-shuffler:/workspace:rw"
+# export TEAM=gamenite
+export SANDBOX_VOLUMES="/workspaces/openhands:/workspace:rw"
+export TEAM=platform
 
 # If you haven't yet:
 # poetry install
