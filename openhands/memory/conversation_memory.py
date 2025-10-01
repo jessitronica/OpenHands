@@ -73,6 +73,28 @@ class ConversationMemory:
         """
         return bool(url and url.strip())
 
+    def _extract_message_content_for_logging(
+        self, event: Event, tool_call_id_to_message: dict[str, Message]
+    ) -> str:
+        """Extract message content from an event for logging purposes.
+
+        Args:
+            event: The event to extract message content from
+            tool_call_id_to_message: Dictionary mapping tool call IDs to messages
+
+        Returns:
+            A string describing the message content or what's missing
+        """
+        if not hasattr(event, 'tool_call_metadata') or not event.tool_call_metadata:
+            return "no tool call metadata"
+
+        message = tool_call_id_to_message.get(event.tool_call_metadata.tool_call_id)
+        if not message or not message.content:
+            return "message not found or empty"
+
+        text_contents = [c.text for c in message.content if isinstance(c, TextContent)]
+        return " ".join(text_contents) if text_contents else "no text content"
+
     def process_events(
         self,
         condensed_history: list[Event],
@@ -114,7 +136,9 @@ class ConversationMemory:
                 if isinstance(event, Action):
                     span.add_event("process_action", {"app.action": str(event), "app.action_type": type(event).__name__,
                                                       "app.pending_tool_call_action_messages": str(pending_tool_call_action_messages),
-                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message)})
+                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message),
+                                                      "app.message_content": self._extract_message_content_for_logging(event, tool_call_id_to_message),
+                                                      "app.tool_call_id": event.tool_call_metadata.tool_call_id if event.tool_call_metadata else "no tool call metadata"})
                     messages_to_add = self._process_action(
                         action=event,
                         pending_tool_call_action_messages=pending_tool_call_action_messages,
@@ -122,7 +146,8 @@ class ConversationMemory:
                     )
                 elif isinstance(event, Observation):
                     span.add_event("process_observation", {"app.observation": str(event), "app.observation_type": type(event).__name__,
-                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message)})
+                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message),
+                                                      "app.message_content": self._extract_message_content_for_logging(event, tool_call_id_to_message)})
                     messages_to_add = self._process_observation(
                         obs=event,
                         tool_call_id_to_message=tool_call_id_to_message,
