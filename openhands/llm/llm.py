@@ -545,9 +545,16 @@ class LLM(RetryMixin, DebugMixin):
             or any(m in self.config.model for m in FUNCTION_CALLING_SUPPORTED_MODELS)
         )
 
+        # Check if it's an Anthropic model (all Anthropic models support function calling)
+        is_anthropic_model = (
+            'claude' in self.config.model.lower()
+            or 'anthropic' in self.config.model.lower()
+            or self.config.model.startswith('anthropic/')
+        )
+
         # Handle native_tool_calling user-defined configuration
         if self.config.native_tool_calling is None:
-            self._function_calling_active = model_name_supported
+            self._function_calling_active = model_name_supported or is_anthropic_model
         else:
             self._function_calling_active = self.config.native_tool_calling
 

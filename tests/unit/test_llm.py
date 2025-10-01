@@ -585,6 +585,51 @@ def test_gemini_25_pro_function_calling(mock_httpx_get, mock_get_model_info):
         )
 
 
+@patch('openhands.llm.llm.litellm.get_model_info')
+def test_anthropic_models_function_calling(mock_get_model_info):
+    """
+    Test that all Anthropic models have function calling enabled by default.
+    This includes testing various model name formats with different prefixes.
+    """
+    # Mock the model info response
+    mock_get_model_info.return_value = {
+        'max_input_tokens': 8000,
+        'max_output_tokens': 2000,
+    }
+
+    # Test cases with model names and expected function calling support
+    test_cases = [
+        # Claude models (all should support function calling)
+        ('claude-3-opus-20240229', True),
+        ('claude-3-sonnet-20240229', True),
+        ('claude-3-haiku-20240307', True),
+        ('claude-3-5-sonnet-20240620', True),
+        ('claude-3-5-sonnet-20241022', True),
+        ('claude-3-5-haiku-20241022', True),
+        ('claude-3-7-sonnet-20250219', True),
+        ('claude-sonnet-3-7-latest', True),
+        ('claude-sonnet-4-20250514', True),
+        ('claude-opus-4-20250514', True),
+        # With anthropic/ prefix
+        ('anthropic/claude-3-opus-20240229', True),
+        ('anthropic/claude-3-5-sonnet-20241022', True),
+        # Custom Anthropic model names
+        ('claude-custom-model', True),
+        ('anthropic-custom-model', True),
+        # Non-Anthropic models (control cases)
+        ('gpt-4', False),
+        ('gemini-1.0-pro', False),
+    ]
+
+    for model_name, expected_support in test_cases:
+        config = LLMConfig(model=model_name, api_key='test_key')
+        llm = LLM(config)
+
+        assert llm.is_function_calling_active() == expected_support, (
+            f'Expected function calling support to be {expected_support} for model {model_name}'
+        )
+
+
 @patch('openhands.llm.llm.litellm_completion')
 def test_completion_retry_with_llm_no_response_error_nonzero_temp_successful_retry(
     mock_litellm_completion, default_config
