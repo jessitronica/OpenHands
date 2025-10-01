@@ -480,6 +480,10 @@ class AgentController:
         trace.get_current_span().add_event("observation", {"app.observation": str(observation), "app.observation_type": type(observation).__name__,
                                                            "app.observation_cause": observation.cause,
                                                            "app.pending_action": str(self._pending_action)})
+        
+        # Mark span as error if ErrorObservation is received
+        if isinstance(observation, ErrorObservation):
+            trace.get_current_span().set_status(trace.StatusCode.ERROR)
 
         # TODO: these metrics come from the draft editor, and they get accumulated into controller's state metrics and the agent's llm metrics
         # In the future, we should have a more principled way to sharing metrics across all LLM instances for a given conversation

@@ -10,6 +10,7 @@ from typing import Any, Callable
 from openhands.core.logger import openhands_logger as logger
 from openhands.events.event import Event, EventSource
 from openhands.events.event_store import EventStore
+from openhands.events.observation.error import ErrorObservation
 from openhands.events.serialization.event import event_from_dict, event_to_dict
 from openhands.io import json
 from openhands.storage import FileStore
@@ -172,6 +173,11 @@ class EventStream(EventStore):
                 "jess.whereami": "we are in add_event in stream.py",
             },
         )
+        
+        # Mark span as error if ErrorObservation is added
+        if isinstance(event, ErrorObservation):
+            trace.get_current_span().set_status(trace.StatusCode.ERROR)
+        
         if event.id != Event.INVALID_ID:
             raise ValueError(
                 f'Event already has an ID:{event.id}. It was probably added back to the EventStream from inside a handler, triggering a loop.'
