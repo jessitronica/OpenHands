@@ -711,7 +711,7 @@ def print_link_to_current_trace() -> None:
     # the trace_id needs to be the same number of digits
     trace_id_in_hex_string = hex(trace_id)[2:].zfill(32)
     print(
-        f"Link to current trace: https://ui.honeycomb.io/opentelemetry-workshop/environments/openhands/trace?trace_id={trace_id_in_hex_string}"
+        f"Link to current trace: https://play.honeycomb.io/sandbox/environments/workshop/trace?trace_id={trace_id_in_hex_string}"
     )
     print(f"https://jaeger.jessitron.honeydemo.io/trace/{trace_id_in_hex_string}")
 
