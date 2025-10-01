@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 from openhands.core.config.condenser_config import (
@@ -19,6 +20,8 @@ from openhands.memory.condenser.condenser import (
     RollingCondenser,
     View,
 )
+
+tracer = trace.get_tracer(__name__)
 
 
 class StateSummary(BaseModel):
@@ -197,26 +200,34 @@ class StructuredSummaryCondenser(RollingCondenser):
         return truncate_content(content, max_chars=self.max_event_length)
 
     def get_condensation(self, view: View) -> Condensation:
-        head = view[: self.keep_first]
-        target_size = self.max_size // 2
-        # Number of events to keep from the tail -- target size, minus however many
-        # prefix events from the head, minus one for the summarization event
-        events_from_tail = target_size - len(head) - 1
+        with tracer.start_as_current_span('condenser.summarize') as span:
+            span.set_attribute('condenser.type', 'structured_summary')
+            span.set_attribute('condenser.view_size', len(view))
+            span.set_attribute('condenser.max_size', self.max_size)
+            span.set_attribute('condenser.keep_first', self.keep_first)
 
-        summary_event = (
-            view[self.keep_first]
-            if isinstance(view[self.keep_first], AgentCondensationObservation)
-            else AgentCondensationObservation('No events summarized')
-        )
+            head = view[: self.keep_first]
+            target_size = self.max_size // 2
+            # Number of events to keep from the tail -- target size, minus however many
+            # prefix events from the head, minus one for the summarization event
+            events_from_tail = target_size - len(head) - 1
 
-        # Identify events to be forgotten (those not in head or tail)
-        forgotten_events = []
-        for event in view[self.keep_first : -events_from_tail]:
-            if not isinstance(event, AgentCondensationObservation):
-                forgotten_events.append(event)
+            summary_event = (
+                view[self.keep_first]
+                if isinstance(view[self.keep_first], AgentCondensationObservation)
+                else AgentCondensationObservation('No events summarized')
+            )
 
-        # Construct prompt for summarization
-        prompt = """You are maintaining a context-aware state summary for an interactive software agent. This summary is critical because it:
+            # Identify events to be forgotten (those not in head or tail)
+            forgotten_events = []
+            for event in view[self.keep_first : -events_from_tail]:
+                if not isinstance(event, AgentCondensationObservation):
+                    forgotten_events.append(event)
+
+            span.set_attribute('condenser.forgotten_events_count', len(forgotten_events))
+
+            # Construct prompt for summarization
+            prompt = """You are maintaining a context-aware state summary for an interactive software agent. This summary is critical because it:
 1. Preserves essential context when conversation history grows too large
 2. Prevents lost work when the session length exceeds token limits
 3. Helps maintain continuity across multiple interactions
@@ -250,59 +261,64 @@ Capture all relevant information, especially:
             event_content = self._truncate(str(forgotten_event))
             prompt += f'<EVENT id={forgotten_event.id}>\n{event_content}\n</EVENT>\n'
 
-        messages = [Message(role='user', content=[TextContent(text=prompt)])]
+            messages = [Message(role='user', content=[TextContent(text=prompt)])]
 
-        response = self.llm.completion(
-            messages=self.llm.format_messages_for_llm(messages),
-            tools=[StateSummary.tool_description()],
-            tool_choice={
-                'type': 'function',
-                'function': {'name': 'create_state_summary'},
-            },
-        )
-
-        try:
-            # Extract the message containing tool calls
-            message = response.choices[0].message
-
-            # Check if there are tool calls
-            if not hasattr(message, 'tool_calls') or not message.tool_calls:
-                raise ValueError('No tool calls found in response')
-
-            # Find the create_state_summary tool call
-            summary_tool_call = None
-            for tool_call in message.tool_calls:
-                if tool_call.function.name == 'create_state_summary':
-                    summary_tool_call = tool_call
-                    break
-
-            if not summary_tool_call:
-                raise ValueError('create_state_summary tool call not found')
-
-            # Parse the arguments
-            args_json = summary_tool_call.function.arguments
-            args_dict = json.loads(args_json)
-
-            # Create a StateSummary object
-            summary = StateSummary.model_validate(args_dict)
-
-        except (ValueError, AttributeError, KeyError, json.JSONDecodeError) as e:
-            logger.warning(
-                f'Failed to parse summary tool call: {e}. Using empty summary.'
+            response = self.llm.completion(
+                messages=self.llm.format_messages_for_llm(messages),
+                tools=[StateSummary.tool_description()],
+                tool_choice={
+                    'type': 'function',
+                    'function': {'name': 'create_state_summary'},
+                },
             )
-            summary = StateSummary()
 
-        self.add_metadata('response', response.model_dump())
-        self.add_metadata('metrics', self.llm.metrics.get())
+            try:
+                # Extract the message containing tool calls
+                message = response.choices[0].message
 
-        return Condensation(
-            action=CondensationAction(
-                forgotten_events_start_id=min(event.id for event in forgotten_events),
-                forgotten_events_end_id=max(event.id for event in forgotten_events),
-                summary=str(summary),
-                summary_offset=self.keep_first,
+                # Check if there are tool calls
+                if not hasattr(message, 'tool_calls') or not message.tool_calls:
+                    raise ValueError('No tool calls found in response')
+
+                # Find the create_state_summary tool call
+                summary_tool_call = None
+                for tool_call in message.tool_calls:
+                    if tool_call.function.name == 'create_state_summary':
+                        summary_tool_call = tool_call
+                        break
+
+                if not summary_tool_call:
+                    raise ValueError('create_state_summary tool call not found')
+
+                # Parse the arguments
+                args_json = summary_tool_call.function.arguments
+                args_dict = json.loads(args_json)
+
+                # Create a StateSummary object
+                summary = StateSummary.model_validate(args_dict)
+                span.set_attribute('condenser.summary_parsed', True)
+
+            except (ValueError, AttributeError, KeyError, json.JSONDecodeError) as e:
+                logger.warning(
+                    f'Failed to parse summary tool call: {e}. Using empty summary.'
+                )
+                summary = StateSummary()
+                span.set_attribute('condenser.summary_parsed', False)
+                span.set_attribute('condenser.parse_error', str(e))
+
+            span.set_attribute('condenser.summary_length', len(str(summary)))
+
+            self.add_metadata('response', response.model_dump())
+            self.add_metadata('metrics', self.llm.metrics.get())
+
+            return Condensation(
+                action=CondensationAction(
+                    forgotten_events_start_id=min(event.id for event in forgotten_events),
+                    forgotten_events_end_id=max(event.id for event in forgotten_events),
+                    summary=str(summary),
+                    summary_offset=self.keep_first,
+                )
             )
-        )
 
     def should_condense(self, view: View) -> bool:
         return len(view) > self.max_size

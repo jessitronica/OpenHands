@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from opentelemetry import trace
+
 from openhands.core.config.condenser_config import LLMSummarizingCondenserConfig
 from openhands.core.message import Message, TextContent
 from openhands.events.action.agent import CondensationAction
@@ -11,6 +13,8 @@ from openhands.memory.condenser.condenser import (
     RollingCondenser,
     View,
 )
+
+tracer = trace.get_tracer(__name__)
 
 
 class LLMSummarizingCondenser(RollingCondenser):
@@ -49,26 +53,34 @@ class LLMSummarizingCondenser(RollingCondenser):
         return truncate_content(content, max_chars=self.max_event_length)
 
     def get_condensation(self, view: View) -> Condensation:
-        head = view[: self.keep_first]
-        target_size = self.max_size // 2
-        # Number of events to keep from the tail -- target size, minus however many
-        # prefix events from the head, minus one for the summarization event
-        events_from_tail = target_size - len(head) - 1
+        with tracer.start_as_current_span('condenser.summarize') as span:
+            span.set_attribute('condenser.type', 'llm_summarizing')
+            span.set_attribute('condenser.view_size', len(view))
+            span.set_attribute('condenser.max_size', self.max_size)
+            span.set_attribute('condenser.keep_first', self.keep_first)
 
-        summary_event = (
-            view[self.keep_first]
-            if isinstance(view[self.keep_first], AgentCondensationObservation)
-            else AgentCondensationObservation('No events summarized')
-        )
+            head = view[: self.keep_first]
+            target_size = self.max_size // 2
+            # Number of events to keep from the tail -- target size, minus however many
+            # prefix events from the head, minus one for the summarization event
+            events_from_tail = target_size - len(head) - 1
 
-        # Identify events to be forgotten (those not in head or tail)
-        forgotten_events = []
-        for event in view[self.keep_first : -events_from_tail]:
-            if not isinstance(event, AgentCondensationObservation):
-                forgotten_events.append(event)
+            summary_event = (
+                view[self.keep_first]
+                if isinstance(view[self.keep_first], AgentCondensationObservation)
+                else AgentCondensationObservation('No events summarized')
+            )
 
-        # Construct prompt for summarization
-        prompt = """You are maintaining a context-aware state summary for an interactive agent. You will be given a list of events corresponding to actions taken by the agent, and the most recent previous summary if one exists. Track:
+            # Identify events to be forgotten (those not in head or tail)
+            forgotten_events = []
+            for event in view[self.keep_first : -events_from_tail]:
+                if not isinstance(event, AgentCondensationObservation):
+                    forgotten_events.append(event)
+
+            span.set_attribute('condenser.forgotten_events_count', len(forgotten_events))
+
+            # Construct prompt for summarization
+            prompt = """You are maintaining a context-aware state summary for an interactive agent. You will be given a list of events corresponding to actions taken by the agent, and the most recent previous summary if one exists. Track:
 
 USER_CONTEXT: (Preserve essential user requirements, goals, and clarifications in concise form)
 
@@ -127,27 +139,29 @@ CURRENT_STATE: Last flip: Heads, Haiku count: 15/20"""
             event_content = self._truncate(str(forgotten_event))
             prompt += f'<EVENT id={forgotten_event.id}>\n{event_content}\n</EVENT>\n'
 
-        prompt += 'Now summarize the events using the rules above.'
+            prompt += 'Now summarize the events using the rules above.'
 
-        messages = [Message(role='user', content=[TextContent(text=prompt)])]
+            messages = [Message(role='user', content=[TextContent(text=prompt)])]
 
-        response = self.llm.completion(
-            messages=self.llm.format_messages_for_llm(messages),
-            extra_body={'metadata': self._llm_metadata},
-        )
-        summary = response.choices[0].message.content
-
-        self.add_metadata('response', response.model_dump())
-        self.add_metadata('metrics', self.llm.metrics.get())
-
-        return Condensation(
-            action=CondensationAction(
-                forgotten_events_start_id=min(event.id for event in forgotten_events),
-                forgotten_events_end_id=max(event.id for event in forgotten_events),
-                summary=summary,
-                summary_offset=self.keep_first,
+            response = self.llm.completion(
+                messages=self.llm.format_messages_for_llm(messages),
+                extra_body={'metadata': self._llm_metadata},
             )
-        )
+            summary = response.choices[0].message.content
+
+            span.set_attribute('condenser.summary_length', len(summary))
+
+            self.add_metadata('response', response.model_dump())
+            self.add_metadata('metrics', self.llm.metrics.get())
+
+            return Condensation(
+                action=CondensationAction(
+                    forgotten_events_start_id=min(event.id for event in forgotten_events),
+                    forgotten_events_end_id=max(event.id for event in forgotten_events),
+                    summary=summary,
+                    summary_offset=self.keep_first,
+                )
+            )
 
     def should_condense(self, view: View) -> bool:
         return len(view) > self.max_size

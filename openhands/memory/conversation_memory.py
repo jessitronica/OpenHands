@@ -1,6 +1,7 @@
 from typing import Generator
 
 from litellm import ModelResponse
+from opentelemetry import trace
 
 from openhands.core.config.agent_config import AgentConfig
 from openhands.core.logger import openhands_logger as logger
@@ -50,9 +51,9 @@ from openhands.utils.prompt import (
     RepositoryInfo,
     RuntimeInfo,
 )
-from opentelemetry import trace
 
 tracer = trace.get_tracer(__name__)
+
 
 class ConversationMemory:
     """Processes event history into a coherent conversation for the agent."""
@@ -86,14 +87,14 @@ class ConversationMemory:
             A string describing the message content or what's missing
         """
         if not hasattr(event, 'tool_call_metadata') or not event.tool_call_metadata:
-            return "no tool call metadata"
+            return 'no tool call metadata'
 
         message = tool_call_id_to_message.get(event.tool_call_metadata.tool_call_id)
         if not message or not message.content:
-            return "message not found or empty"
+            return 'message not found or empty'
 
         text_contents = [c.text for c in message.content if isinstance(c, TextContent)]
-        return " ".join(text_contents) if text_contents else "no text content"
+        return ' '.join(text_contents) if text_contents else 'no text content'
 
     def process_events(
         self,
@@ -113,7 +114,7 @@ class ConversationMemory:
             vision_is_active: Whether vision is active in the LLM. If True, image URLs will be included.
             initial_user_action: The initial user message action, if available. Used to ensure the conversation starts correctly.
         """
-        with tracer.start_as_current_span("process_events") as span:
+        with tracer.start_as_current_span('process_events') as span:
             events = condensed_history
             span.set_attribute('app.conversation.event_count', len(events))
 
@@ -122,7 +123,9 @@ class ConversationMemory:
             self._ensure_initial_user_message(events, initial_user_action)
 
             # log visual browsing status
-            logger.debug(f'Visual browsing: {self.agent_config.enable_som_visual_browsing}')
+            logger.debug(
+                f'Visual browsing: {self.agent_config.enable_som_visual_browsing}'
+            )
 
             # Initialize empty messages list
             messages = []
@@ -134,20 +137,40 @@ class ConversationMemory:
             for i, event in enumerate(events):
                 # create a regular message from an event
                 if isinstance(event, Action):
-                    span.add_event("process_action", {"app.action": str(event), "app.action_type": type(event).__name__,
-                                                      "app.pending_tool_call_action_messages": str(pending_tool_call_action_messages),
-                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message),
-                                                      "app.message_content": self._extract_message_content_for_logging(event, tool_call_id_to_message),
-                                                      "app.tool_call_id": event.tool_call_metadata.tool_call_id if event.tool_call_metadata else "no tool call metadata"})
+                    span.add_event(
+                        'process_action',
+                        {
+                            'app.action': str(event),
+                            'app.action_type': type(event).__name__,
+                            'app.pending_tool_call_action_messages': str(
+                                pending_tool_call_action_messages
+                            ),
+                            'app.tool_call_id_to_message': str(tool_call_id_to_message),
+                            'app.message_content': self._extract_message_content_for_logging(
+                                event, tool_call_id_to_message
+                            ),
+                            'app.tool_call_id': event.tool_call_metadata.tool_call_id
+                            if event.tool_call_metadata
+                            else 'no tool call metadata',
+                        },
+                    )
                     messages_to_add = self._process_action(
                         action=event,
                         pending_tool_call_action_messages=pending_tool_call_action_messages,
                         vision_is_active=vision_is_active,
                     )
                 elif isinstance(event, Observation):
-                    span.add_event("process_observation", {"app.observation": str(event), "app.observation_type": type(event).__name__,
-                                                      "app.tool_call_id_to_message": str(tool_call_id_to_message),
-                                                      "app.message_content": self._extract_message_content_for_logging(event, tool_call_id_to_message)})
+                    span.add_event(
+                        'process_observation',
+                        {
+                            'app.observation': str(event),
+                            'app.observation_type': type(event).__name__,
+                            'app.tool_call_id_to_message': str(tool_call_id_to_message),
+                            'app.message_content': self._extract_message_content_for_logging(
+                                event, tool_call_id_to_message
+                            ),
+                        },
+                    )
                     messages_to_add = self._process_observation(
                         obs=event,
                         tool_call_id_to_message=tool_call_id_to_message,
@@ -159,10 +182,17 @@ class ConversationMemory:
                     )
                 else:
                     raise ValueError(f'Unknown event type: {type(event)}')
-                span.set_attribute('app.conversation.added_action_messages', str(messages_to_add))
-                span.set_attribute('app.conversation.messages_count', len(messages_to_add))
+                span.set_attribute(
+                    'app.conversation.added_action_messages', str(messages_to_add)
+                )
+                span.set_attribute(
+                    'app.conversation.messages_count', len(messages_to_add)
+                )
 
-                span.set_attribute("app.pending_tool_call_action_messages", str(pending_tool_call_action_messages))
+                span.set_attribute(
+                    'app.pending_tool_call_action_messages',
+                    str(pending_tool_call_action_messages),
+                )
                 # Check pending tool call action messages and see if they are complete
                 _response_ids_to_remove = []
                 for (
@@ -188,7 +218,10 @@ class ConversationMemory:
                             messages_to_add.append(tool_response_msg)
                             tool_call_id_to_message.pop(tool_call.id)
                         _response_ids_to_remove.append(response_id)
-                        span.add_event("adding message and tool call responses", {"app.pending_message": str(pending_message)})
+                        span.add_event(
+                            'adding message and tool call responses',
+                            {'app.pending_message': str(pending_message)},
+                        )
 
                 # Cleanup the processed pending tool messages
                 for response_id in _response_ids_to_remove:

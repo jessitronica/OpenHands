@@ -189,12 +189,17 @@ class CodeActAgent(Agent):
         # event we'll just return that instead of an action. The controller will
         # immediately ask the agent to step again with the new view.
         condensed_history: list[Event] = []
-        match self.condenser.condensed_history(state):
-            case View(events=events):
-                condensed_history = events
+        with tracer.start_as_current_span('condenser.check') as span:
+            span.set_attribute('history.total_events', len(state.history))
+            match self.condenser.condensed_history(state):
+                case View(events=events):
+                    condensed_history = events
+                    span.set_attribute('condenser.triggered', False)
+                    span.set_attribute('history.condensed_events', len(condensed_history))
 
-            case Condensation(action=condensation_action):
-                return condensation_action
+                case Condensation(action=condensation_action):
+                    span.set_attribute('condenser.triggered', True)
+                    return condensation_action
 
         logger.debug(
             f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
