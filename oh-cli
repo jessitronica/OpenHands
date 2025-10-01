@@ -33,10 +33,28 @@ export OTEL_LOG_LEVEL=info
 # DEBUG = 10
 # NOTSET = 0
 
+project_name=${1:-"simple-web-page"}
+echo "Project name: $project_name"
+
 # export SANDBOX_VOLUMES="/workspaces/mtg-deck-shuffler:/workspace:rw"
 # export TEAM=gamenite
-export SANDBOX_VOLUMES="/workspaces/openhands:/workspace:rw"
-export TEAM=platform
+if [ "$project_name" = "mtg-deck-shuffler" ]; then
+  export SANDBOX_VOLUMES="/workspaces/mtg-deck-shuffler:/workspace:rw"
+  export TEAM=gamenite
+elsif [ "$project_name" = "simple-web-page" ]; then
+  export SANDBOX_VOLUMES="/workspaces/simple-web-page:/workspace:rw"
+  export TEAM=web
+elsif [ "$project_name" = "openhands" ]; then
+  export SANDBOX_VOLUMES="/workspaces/openhands:/workspace:rw"
+  export TEAM=platform
+else
+  if [ ! -d "/workspaces/$project_name" ]; then
+    echo "Project $project_name does not exist"
+    exit 1
+  fi
+  export SANDBOX_VOLUMES="/workspaces/$project_name:/workspace:rw"
+  export TEAM=$project_name
+fi
 
 # If you haven't yet:
 # poetry install
