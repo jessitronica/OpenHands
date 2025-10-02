@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from openhands.events.action import Action
     from openhands.llm.llm import ModelResponse
 
+from opentelemetry import trace
+
 import openhands.agenthub.codeact_agent.function_calling as codeact_function_calling
 from openhands.agenthub.codeact_agent.tools.bash import create_cmd_run_tool
 from openhands.agenthub.codeact_agent.tools.browser import BrowserTool
@@ -21,7 +23,6 @@ from openhands.agenthub.codeact_agent.tools.llm_based_edit import LLMBasedFileEd
 from openhands.agenthub.codeact_agent.tools.str_replace_editor import (
     create_str_replace_editor_tool,
 )
-from openhands.agenthub.codeact_agent.tools.web_search import WebSearchTool
 from openhands.agenthub.codeact_agent.tools.think import ThinkTool
 from openhands.controller.agent import Agent
 from openhands.controller.state.state import State
@@ -41,9 +42,9 @@ from openhands.runtime.plugins import (
     PluginRequirement,
 )
 from openhands.utils.prompt import PromptManager
-from opentelemetry import trace
 
 tracer = trace.get_tracer(__name__)
+
 
 class CodeActAgent(Agent):
     VERSION = '2.2'
@@ -85,14 +86,16 @@ class CodeActAgent(Agent):
         - llm (LLM): The llm to be used by this agent
         - config (AgentConfig): The configuration for this agent
         """
-        with tracer.start_as_current_span("initialize codeact agent") as span:
+        with tracer.start_as_current_span('initialize codeact agent'):
             super().__init__(llm, config)
             self.pending_actions: deque['Action'] = deque()
             self.reset()
             self.tools = self._get_tools()
 
             # Create a ConversationMemory instance
-            self.conversation_memory = ConversationMemory(self.config, self.prompt_manager)
+            self.conversation_memory = ConversationMemory(
+                self.config, self.prompt_manager
+            )
 
             self.condenser = Condenser.from_config(self.config.condenser)
             logger.debug(f'Using condenser: {type(self.condenser)}')
@@ -110,7 +113,7 @@ class CodeActAgent(Agent):
     def _get_tools(self) -> list['ChatCompletionToolParam']:
         # For these models, we use short tool descriptions ( < 1024 tokens)
         # to avoid hitting the OpenAI token limit for tool descriptions.
-        with tracer.start_as_current_span("get tools") as span:
+        with tracer.start_as_current_span('get tools') as span:
             SHORT_TOOL_DESCRIPTION_LLM_SUBSTRS = ['gpt-', 'o3', 'o1', 'o4']
 
             use_short_tool_desc = False
@@ -122,10 +125,12 @@ class CodeActAgent(Agent):
 
             tools = []
             trace.get_current_span().set_attribute(
-                "app.codeact.config", str(self.config)
+                'app.codeact.config', str(self.config)
             )
             if self.config.enable_cmd:
-                tools.append(create_cmd_run_tool(use_short_description=use_short_tool_desc))
+                tools.append(
+                    create_cmd_run_tool(use_short_description=use_short_tool_desc)
+                )
             if self.config.enable_think:
                 tools.append(ThinkTool)
             if self.config.enable_finish:
@@ -148,9 +153,10 @@ class CodeActAgent(Agent):
                     )
                 )
             # Add web search tool (hardcoded for CLI mode)
-          #  tools.append(WebSearchTool)
+            #  tools.append(WebSearchTool)
             span.set_attribute(
-                "app.tool_names", str([tool.get("function").get("name") for tool in tools])
+                'app.tool_names',
+                str([tool.get('function').get('name') for tool in tools]),
             )
             return tools
 
@@ -189,17 +195,17 @@ class CodeActAgent(Agent):
         # event we'll just return that instead of an action. The controller will
         # immediately ask the agent to step again with the new view.
         condensed_history: list[Event] = []
-        with tracer.start_as_current_span('condenser.check') as span:
-            span.set_attribute('history.total_events', len(state.history))
-            match self.condenser.condensed_history(state):
-                case View(events=events):
-                    condensed_history = events
-                    span.set_attribute('condenser.triggered', False)
-                    span.set_attribute('history.condensed_events', len(condensed_history))
+        span = trace.get_current_span()
+        span.set_attribute('history.total_events', len(state.history))
+        match self.condenser.condensed_history(state):
+            case View(events=events):
+                condensed_history = events
+                span.set_attribute('condenser.triggered', False)
+                span.set_attribute('history.condensed_events', len(condensed_history))
 
-                case Condensation(action=condensation_action):
-                    span.set_attribute('condenser.triggered', True)
-                    return condensation_action
+            case Condensation(action=condensation_action):
+                span.set_attribute('condenser.triggered', True)
+                return condensation_action
 
         logger.debug(
             f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
