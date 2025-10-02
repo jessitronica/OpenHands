@@ -716,8 +716,10 @@ def print_link_to_current_trace() -> None:
     print(f"https://jaeger.jessitron.honeydemo.io/trace/{trace_id_in_hex_string}")
 
 if __name__ == '__main__':
-    with tracer.start_as_current_span("main"):
+    with tracer.start_as_current_span("main") as span:
         trace_utils.remember_root_span()
+        span.set_attributes ({ "app.user": os.environ.get("USER", "unknown"),
+                             "app.team": os.environ.get("TEAM", "unknown") })
         main()
         print_link_to_current_trace()
         logger.warning("Exiting")
