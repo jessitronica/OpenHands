@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 
-
+# Important OpenTelemetry setup!
 export OTEL_SERVICE_NAME="openhands-cli"
 
 export OTEL_TRACES_EXPORTER="otlp"
@@ -13,31 +13,12 @@ export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
 export OTEL_DEBUG=true
 export OTEL_LOG_LEVEL=info
 
-## Log levels (not case-sensitive) for --log-level
-# _nameToLevel = {
-#     'CRITICAL': CRITICAL,
-#     'FATAL': FATAL,
-#     'ERROR': ERROR,
-#     'WARN': WARNING,
-#     'WARNING': WARNING,
-#     'INFO': INFO,
-#     'DEBUG': DEBUG,
-#     'NOTSET': NOTSET,
-# }
-# CRITICAL = 50
-# FATAL = CRITICAL
-# ERROR = 40
-# WARNING = 30
-# WARN = WARNING
-# INFO = 20
-# DEBUG = 10
-# NOTSET = 0
-
+# Unimportant setup.
+# all this stuff is specific to Jess's environment in vscode
+# for demo purposes
 project_name=${1:-"simple-web-page"}
 echo "Project name: $project_name"
 
-# export SANDBOX_VOLUMES="/workspaces/mtg-deck-shuffler:/workspace:rw"
-# export TEAM=gamenite
 if [ "$project_name" = "mtg-deck-shuffler" ]; then
   export SANDBOX_VOLUMES="/workspaces/mtg-deck-shuffler:/workspace:rw"
   export TEAM=gamenite
@@ -59,4 +40,25 @@ fi
 # If you haven't yet:
 # poetry install
 
+## Log levels (not case-sensitive) for --log-level
+# _nameToLevel = {
+#     'CRITICAL': CRITICAL,
+#     'FATAL': FATAL,
+#     'ERROR': ERROR,
+#     'WARN': WARNING,
+#     'WARNING': WARNING,
+#     'INFO': INFO,
+#     'DEBUG': DEBUG,
+#     'NOTSET': NOTSET,
+# }
+# CRITICAL = 50
+# FATAL = CRITICAL
+# ERROR = 40
+# WARNING = 30
+# WARN = WARNING
+# INFO = 20
+# DEBUG = 10
+# NOTSET = 0
+
+# Important! opentelemetry-instrument sets up the magic
 poetry run opentelemetry-instrument --logs_exporter otlp --metrics_exporter none python -m openhands.cli.main  # --log-level info
